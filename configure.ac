@@ -1,17 +1,19 @@
 dnl Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.67])
-AC_INIT([libmlx4],[1.0.6],[linux-rdma@vger.kernel.org])
+AC_PREREQ(2.57)
+AC_INIT(libmlx4, 1.0.6mlnx1, linux-rdma@vger.kernel.org)
 AC_CONFIG_SRCDIR([src/mlx4.h])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_HEADER(config.h)
-AM_INIT_AUTOMAKE([foreign subdir-objects])
+AM_INIT_AUTOMAKE([1.10 foreign tar-ustar silent-rules subdir-objects])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
+AC_PROG_LIBTOOL
 LT_INIT
 
 AC_ARG_WITH([valgrind],
-    AS_HELP_STRING([--with-valgrind],[Enable Valgrind annotations (small runtime overhead, default NO)]))
+    AC_HELP_STRING([--with-valgrind],
+        [Enable Valgrind annotations (small runtime overhead, default NO)]))
 if test x$with_valgrind = x || test x$with_valgrind = xno; then
     want_valgrind=no
     AC_DEFINE([NVALGRIND], 1, [Define to 1 to disable Valgrind annotations.])
@@ -22,9 +24,15 @@ else
     fi
 fi
 
+#--with-wqe-format
+AC_ARG_WITH([wqe-format],
+    AC_HELP_STRING([--with-wqe-format],
+        [Enable wqe-format annotations (default NO)]),
+    AC_DEFINE([MLX4_WQE_FORMAT], 1, [Define to 1 to enable wqe-foramt annotations.]),
+)
+
 dnl Checks for programs
 AC_PROG_CC
-AC_LANG([C])
 
 dnl Checks for libraries
 AC_CHECK_LIB(ibverbs, ibv_get_device_list, [],
@@ -34,30 +42,24 @@ dnl Checks for header files.
 AC_CHECK_HEADER(infiniband/driver.h, [],
     AC_MSG_ERROR([<infiniband/driver.h> not found.  libmlx4 requires libibverbs.]))
 AC_HEADER_STDC
-AC_CHECK_HEADER(valgrind/memcheck.h,
-    [AC_DEFINE(HAVE_VALGRIND_MEMCHECK_H, 1,
-        [Define to 1 if you have the <valgrind/memcheck.h> header file.])],
-    [if test $want_valgrind = yes; then
-        AC_MSG_ERROR([Valgrind memcheck support requested, but <valgrind/memcheck.h> not found.])
-    fi])
+
+if test x$want_valgrind = xyes; then
+	AC_CHECK_HEADER(valgrind/memcheck.h,
+	    [AC_DEFINE(HAVE_VALGRIND_MEMCHECK_H, 1,
+		[Define to 1 if you have the <valgrind/memcheck.h> header file.])],
+	    [if test $want_valgrind = yes; then
+		AC_MSG_ERROR([Valgrind memcheck support requested, but <valgrind/memcheck.h> not found.])
+	    fi])
+fi
 
 dnl Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
 AC_CHECK_SIZEOF(long)
 
 dnl Checks for library functions
-AC_CHECK_FUNC(verbs_register_driver, [],
-    AC_MSG_ERROR([verbs_register_driver() not found.  libmlx4 requires libibverbs >= 1.1.8.]))
-
-AC_CACHE_CHECK([for IBV_QPT_RAW_PACKET],
-               [ac_cv_ibv_qpt_raw_packet],
-               [AC_COMPILE_IFELSE([AC_LANG_PROGRAM([#include <infiniband/verbs.h>],
-                                                   [enum ibv_qp_type qpt = IBV_QPT_RAW_PACKET;])],
-                                   [ac_cv_ibv_qpt_raw_packet=yes],
-                                   [ac_cv_ibv_qpt_raw_packet=no])])
-if test $ac_cv_ibv_qpt_raw_packet = no; then
-    AC_MSG_ERROR([IBV_QPT_RAW_PACKET not found.  libmlx4 requires libibverbs >= 1.1.8.])
-fi
+AC_CHECK_FUNC(ibv_read_sysfs_file, [],
+    AC_MSG_ERROR([ibv_read_sysfs_file() not found.  libmlx4 requires libibverbs >= 1.0.3.]))
+AC_CHECK_FUNCS(ibv_dontfork_range ibv_dofork_range ibv_register_driver)
 
 dnl Now check if for libibverbs 1.0 vs 1.1
 dummy=if$$
@@ -67,9 +69,8 @@ IBV_DEVICE_LIBRARY_EXTENSION
 IBV_VERSION
 IBV_DEVICE_LIBRARY_EXTENSION=`$CC $CPPFLAGS -E $dummy.c 2> /dev/null | tail -1`
 rm -f $dummy.c
-if test $IBV_DEVICE_LIBRARY_EXTENSION = IBV_DEVICE_LIBRARY_EXTENSION; then
-    AC_MSG_ERROR([libibverbs does not define IBV_DEVICE_LIBRARY_EXTENSION.])
-fi
+AM_CONDITIONAL(HAVE_IBV_DEVICE_LIBRARY_EXTENSION,
+    test $IBV_DEVICE_LIBRARY_EXTENSION != IBV_DEVICE_LIBRARY_EXTENSION)
 AC_SUBST(IBV_DEVICE_LIBRARY_EXTENSION)
 
 AC_CACHE_CHECK(whether ld accepts --version-script, ac_cv_version_script,

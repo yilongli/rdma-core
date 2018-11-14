@@ -35,13 +35,14 @@
 
 #include <infiniband/kern-abi.h>
 
-#define MLX4_UVERBS_MIN_ABI_VERSION	2
+#define MLX4_UVERBS_MIN_ABI_VERSION	3
 #define MLX4_UVERBS_MAX_ABI_VERSION	4
 
-#define MLX4_UVERBS_NO_DEV_CAPS_ABI_VERSION	3
-
 enum {
-	MLX4_USER_DEV_CAP_64B_CQE	= 1L << 0
+	MLX4_USER_DEV_CAP_64B_CQE	= 1L << 0,
+#ifdef MLX4_WQE_FORMAT
+	MLX4_USER_DEV_CAP_WQE_FORMAT    = 1L << 1
+#endif
 };
 
 struct mlx4_alloc_ucontext_resp_v3 {
@@ -49,6 +50,7 @@ struct mlx4_alloc_ucontext_resp_v3 {
 	__u32				qp_tab_size;
 	__u16				bf_reg_size;
 	__u16				bf_regs_per_page;
+	__u32				cqe_size;
 };
 
 struct mlx4_alloc_ucontext_resp {
@@ -58,6 +60,14 @@ struct mlx4_alloc_ucontext_resp {
 	__u16				bf_reg_size;
 	__u16				bf_regs_per_page;
 	__u32				cqe_size;
+};
+
+struct mlx4_alloc_ucontext_req {
+	struct ibv_get_context          cmd;
+#ifdef MLX4_WQE_FORMAT
+	__u32				lib_caps;
+	__u32				reserved;
+#endif
 };
 
 struct mlx4_alloc_pd_resp {
@@ -101,14 +111,23 @@ struct mlx4_create_srq_resp {
 	__u32				reserved;
 };
 
-struct mlx4_create_qp {
-	struct ibv_create_qp		ibv_cmd;
+struct mlx4_create_qp_base {
 	__u64				buf_addr;
 	__u64				db_addr;
 	__u8				log_sq_bb_count;
 	__u8				log_sq_stride;
 	__u8				sq_no_prefetch;	/* was reserved in ABI 2 */
 	__u8				reserved[5];
+};
+
+struct mlx4_exp_create_qp_provider {
+	struct mlx4_create_qp_base	base;
+	__u64				uar_virt_add;
+};
+
+struct mlx4_create_qp {
+	struct ibv_create_qp		ibv_cmd;
+	struct mlx4_create_qp_base	base;
 };
 
 #endif /* MLX4_ABI_H */

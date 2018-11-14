@@ -1,15 +1,27 @@
+%{!?_with_valgrind: %define _with_valgrind 0}
+%{!?_disable_valgrind: %define _disable_valgrind 0}
+
+%if 0%{?rhel} == 6
+%if 0%{_disable_valgrind} == 0
+%define _with_valgrind 1
+%endif
+%endif
+
 Name: libmlx4
-Version: 1.0.6
+Version: 1.0.6mlnx1
 Release: 1%{?dist}
 Summary: Mellanox ConnectX InfiniBand HCA Userspace Driver
 
 Group: System Environment/Libraries
 License: GPLv2 or BSD
 Url: http://openfabrics.org/
-Source: http://openfabrics.org/downloads/mlx4/libmlx4-1.0.6.tar.gz
+Source: http://openfabrics.org/downloads/mlx4/libmlx4-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
-BuildRequires: libibverbs-devel >= 1.1.8
+BuildRequires: libibverbs-devel >= 1.1.6mlnx2
+%if %{_with_valgrind}
+BuildRequires: valgrind-devel
+%endif
 
 %description
 libmlx4 provides a device-specific userspace driver for Mellanox
@@ -29,12 +41,24 @@ application, which may be useful for debugging.
 %setup -q -n %{name}-@VERSION@
 
 %build
-%configure
+%if %{_with_valgrind}
+%configure %{?configure_options} --libdir=%{_libdir}/mlnx_ofed/valgrind --with-valgrind
+make %{?_smp_mflags}
+make DESTDIR=$RPM_BUILD_DIR/%{name}-%{version}/valgrind install
+rm -f $RPM_BUILD_DIR/%{name}-%{version}/valgrind/%{_libdir}/mlnx_ofed/valgrind/*.*a
+make clean
+%endif
+
+%configure %{?configure_options}
 make %{?_smp_mflags}
 
 %install
 rm -rf $RPM_BUILD_ROOT
 make DESTDIR=%{buildroot} install
+%if %{_with_valgrind}
+mkdir -p %{buildroot}/%{_libdir}/mlnx_ofed
+cp -a $RPM_BUILD_DIR/%{name}-%{version}/valgrind/%{_libdir}/mlnx_ofed/valgrind %{buildroot}/%{_libdir}/mlnx_ofed
+%endif
 # remove unpackaged files from the buildroot
 rm -f $RPM_BUILD_ROOT%{_libdir}/*.la $RPM_BUILD_ROOT%{_libdir}/libmlx4.so
 
@@ -43,21 +67,18 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root,-)
-%{_libdir}/libmlx4-rdmav2.so
+%{_libdir}/libmlx4*.so
+%if %{_with_valgrind}
+%{_libdir}/mlnx_ofed/valgrind/libmlx4*.so
+%endif
 %{_sysconfdir}/libibverbs.d/mlx4.driver
 %doc AUTHORS COPYING README
 
 %files devel
 %defattr(-,root,root,-)
-%{_libdir}/libmlx4.a
+%{_libdir}/libmlx4*.a
 
 %changelog
-* Mon May  5 2014 Roland Dreier <roland@digitalvampire.org> - 1.0.6-1
-- New upstream release
-
-* Mon Mar 28 2012 Roland Dreier <roland@digitalvampire.org> - 1.0.5-1
-- New upstream release
-
 * Mon Mar 28 2012 Roland Dreier <roland@digitalvampire.org> - 1.0.4-1
 - New upstream release
 

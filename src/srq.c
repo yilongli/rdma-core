@@ -53,38 +53,43 @@ void mlx4_free_srq_wqe(struct mlx4_srq *srq, int ind)
 {
 	struct mlx4_wqe_srq_next_seg *next;
 
-	pthread_spin_lock(&srq->lock);
+	mlx4_spin_lock(&srq->lock);
 
 	next = get_wqe(srq, srq->tail);
 	next->next_wqe_index = htons(ind);
 	srq->tail = ind;
 
-	pthread_spin_unlock(&srq->lock);
+	mlx4_spin_unlock(&srq->lock);
 }
 
 int mlx4_post_srq_recv(struct ibv_srq *ibsrq,
 		       struct ibv_recv_wr *wr,
 		       struct ibv_recv_wr **bad_wr)
 {
-	struct mlx4_srq *srq = to_msrq(ibsrq);
+	struct mlx4_srq *srq;
 	struct mlx4_wqe_srq_next_seg *next;
 	struct mlx4_wqe_data_seg *scat;
 	int err = 0;
 	int nreq;
 	int i;
 
-	pthread_spin_lock(&srq->lock);
+	if (ibsrq->handle == LEGACY_XRC_SRQ_HANDLE)
+		ibsrq = (struct ibv_srq *)(((struct ibv_srq_legacy *) ibsrq)->ibv_srq);
 
+	srq = to_msrq(ibsrq);
+	mlx4_spin_lock(&srq->lock);
 	for (nreq = 0; wr; ++nreq, wr = wr->next) {
 		if (wr->num_sge > srq->max_gs) {
-			err = -1;
+			errno = EINVAL;
+			err = errno;
 			*bad_wr = wr;
 			break;
 		}
 
 		if (srq->head == srq->tail) {
 			/* SRQ is full*/
-			err = -1;
+			errno = ENOMEM;
+			err = errno;
 			*bad_wr = wr;
 			break;
 		}
@@ -120,7 +125,7 @@ int mlx4_post_srq_recv(struct ibv_srq *ibsrq,
 		*srq->db = htonl(srq->counter);
 	}
 
-	pthread_spin_unlock(&srq->lock);
+	mlx4_spin_unlock(&srq->lock);
 
 	return err;
 }
@@ -251,7 +256,7 @@ struct ibv_srq *mlx4_create_xrc_srq(struct ibv_context *context,
 	if (!srq)
 		return NULL;
 
-	if (pthread_spin_init(&srq->lock, PTHREAD_PROCESS_PRIVATE))
+	if (mlx4_spinlock_init(&srq->lock, !mlx4_single_threaded))
 		goto err;
 
 	srq->max     = align_queue_size(attr_ex->attr.max_wr + 1);
@@ -271,11 +276,10 @@ struct ibv_srq *mlx4_create_xrc_srq(struct ibv_context *context,
 	cmd.buf_addr = (uintptr_t) srq->buf.buf;
 	cmd.db_addr  = (uintptr_t) srq->db;
 
-	ret = ibv_cmd_create_srq_ex(context, &srq->verbs_srq,
-				    sizeof(srq->verbs_srq),
-				    attr_ex,
-				    &cmd.ibv_cmd, sizeof cmd,
-				    &resp.ibv_resp, sizeof resp);
+	ret = ibv_cmd_create_srq_ex(context, &srq->verbs_srq, sizeof(srq->verbs_srq),
+					attr_ex,
+					&cmd.ibv_cmd, sizeof cmd,
+					&resp.ibv_resp, sizeof resp);
 	if (ret)
 		goto err_db;
 
@@ -307,15 +311,15 @@ int mlx4_destroy_xrc_srq(struct ibv_srq *srq)
 
 	mcq = to_mcq(msrq->verbs_srq.cq);
 	mlx4_cq_clean(mcq, 0, msrq);
-	pthread_spin_lock(&mcq->lock);
+	mlx4_lock(&mcq->lock);
 	mlx4_clear_xsrq(&mctx->xsrq_table, msrq->verbs_srq.srq_num);
-	pthread_spin_unlock(&mcq->lock);
+	mlx4_unlock(&mcq->lock);
 
 	ret = ibv_cmd_destroy_srq(srq);
 	if (ret) {
-		pthread_spin_lock(&mcq->lock);
+		mlx4_lock(&mcq->lock);
 		mlx4_store_xsrq(&mctx->xsrq_table, msrq->verbs_srq.srq_num, msrq);
-		pthread_spin_unlock(&mcq->lock);
+		mlx4_unlock(&mcq->lock);
 		return ret;
 	}
 

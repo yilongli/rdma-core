@@ -33,8 +33,6 @@
 #ifndef DOORBELL_H
 #define DOORBELL_H
 
-#include "mmio.h"
-
 #if SIZEOF_LONG == 8
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -47,17 +45,17 @@
 
 static inline void mlx4_write64(uint32_t val[2], struct mlx4_context *ctx, int offset)
 {
-	mmio_writeq((unsigned long)(ctx->uar + offset), MLX4_PAIR_TO_64(val));
+	*(volatile uint64_t *) (ctx->uar + offset) = MLX4_PAIR_TO_64(val);
 }
 
 #else
 
 static inline void mlx4_write64(uint32_t val[2], struct mlx4_context *ctx, int offset)
 {
-	pthread_spin_lock(&ctx->uar_lock);
-	mmio_writel((unsigned long)(ctx->uar + offset), val[0]);
-	mmio_writel((unsigned long)(ctx->uar + offset + 4), val[1]);
-	pthread_spin_unlock(&ctx->uar_lock);
+	mlx4_spin_lock(&ctx->uar_lock);
+	*(volatile uint32_t *) (ctx->uar + offset)     = val[0];
+	*(volatile uint32_t *) (ctx->uar + offset + 4) = val[1];
+	mlx4_spin_unlock(&ctx->uar_lock);
 }
 
 #endif

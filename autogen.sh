@@ -1,4 +1,8 @@
-#! /bin/sh
+#! /bin/sh -eE
 
 set -x
-autoreconf -ifv -I config
+aclocal -I config
+libtoolize --force --copy
+autoheader
+automake --foreign --add-missing --copy
+autoconf

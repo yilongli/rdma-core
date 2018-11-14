@@ -41,8 +41,16 @@ enum {
 	MLX4_WQE_CTRL_FENCE		= 1 << 6,
 	MLX4_WQE_CTRL_CQ_UPDATE		= 3 << 2,
 	MLX4_WQE_CTRL_SOLICIT		= 1 << 1,
-	MLX4_WQE_CTRL_IP_HDR_CSUM	= 1 << 4,
+	MLX4_WQE_CTRL_STRONG_ORDER      = 1 << 7,
+	MLX4_WQE_CTRL_IIP		= 1 << 28,
+	MLX4_WQE_CTRL_IL4		= 1 << 27,
 	MLX4_WQE_CTRL_TCP_UDP_CSUM	= 1 << 5,
+	MLX4_WQE_CTRL_IP_CSUM		= 1 << 4,
+};
+
+enum {
+	MLX4_WQE_BIND_TYPE_2     = (1<<31),
+	MLX4_WQE_BIND_ZERO_BASED = (1<<30),
 };
 
 enum {
@@ -67,7 +75,10 @@ struct mlx4_wqe_ctrl_seg {
 	 * [1]   SE (solicited event)
 	 * [0]   FL (force loopback)
 	 */
-	uint32_t		srcrb_flags;
+	union {
+		uint32_t srcrb_flags;
+		uint16_t srcrb_flags16[2];
+	};
 	/*
 	 * imm is immediate data for send/RDMA write w/ immediate;
 	 * also invalidation key for send with invalidate; input
@@ -100,6 +111,19 @@ struct mlx4_wqe_srq_next_seg {
 	uint32_t		reserved2[3];
 };
 
+struct mlx4_wqe_local_inval_seg {
+	uint64_t		reserved1;
+	uint32_t		mem_key;
+	uint32_t		reserved2;
+	uint64_t		reserved3[2];
+};
+
+enum {
+	MLX4_WQE_MW_REMOTE_READ   = 1 << 29,
+	MLX4_WQE_MW_REMOTE_WRITE  = 1 << 30,
+	MLX4_WQE_MW_ATOMIC        = 1 << 31
+};
+
 struct mlx4_wqe_raddr_seg {
 	uint64_t		raddr;
 	uint32_t		rkey;
@@ -111,6 +135,13 @@ struct mlx4_wqe_atomic_seg {
 	uint64_t		compare;
 };
 
+struct mlx4_wqe_masked_atomic_seg {
+	uint64_t	swap_data;
+	uint64_t	cmp_data;
+	uint64_t	swap_mask;
+	uint64_t	cmp_mask;
+};
+
 struct mlx4_wqe_bind_seg {
 	uint32_t		flags1;
 	uint32_t		flags2;
@@ -118,6 +149,13 @@ struct mlx4_wqe_bind_seg {
 	uint32_t		lkey;
 	uint64_t		addr;
 	uint64_t		length;
+};
+
+struct mlx4_wqe_wait_en_seg {
+	uint32_t valid;
+	uint32_t resv;
+	uint32_t pi;
+	uint32_t obj_num;
 };
 
 #endif /* WQE_H */
