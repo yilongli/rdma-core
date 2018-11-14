@@ -65,37 +65,46 @@ static const char *qptype2key(enum ibv_qp_type type)
 	}
 }
 
+static void update_qp_cap_cache(struct ibv_qp *qp)
+{
+	struct mlx4_context *ctx = to_mctx(qp->context);
+	struct mlx4_qp *mqp = to_mqp(qp);
+
+	if ((qp->qp_type == IBV_QPT_RAW_ETH) && (mqp->link_layer == IBV_LINK_LAYER_ETHERNET)) {
+		if (ctx->exp_device_cap_flags & IBV_EXP_DEVICE_RX_CSUM_IP_PKT)
+			mqp->qp_cap_cache |= MLX4_RX_CSUM_MODE_IP_OK_IP_NON_TCP_UDP;
+		if (ctx->exp_device_cap_flags & IBV_EXP_DEVICE_VXLAN_SUPPORT)
+			mqp->qp_cap_cache |= MLX4_RX_VXLAN;
+	}
+}
+
+int update_port_data(struct ibv_qp *qp, uint8_t port_num)
+{
+	struct mlx4_qp *mqp = to_mqp(qp);
+	struct ibv_port_attr port_attr;
+	int err;
+
+	err = ibv_query_port(qp->context, port_num, &port_attr);
+	if (err)
+		return err;
+
+	mqp->link_layer = port_attr.link_layer;
+	update_qp_cap_cache(qp);
+
+	return 0;
+}
+
 int mlx4_exp_modify_qp(struct ibv_qp *qp, struct ibv_exp_qp_attr *attr,
 		       uint64_t attr_mask)
 {
 	struct ibv_exp_modify_qp cmd;
-	struct ibv_port_attr port_attr;
-	struct ibv_exp_device_attr device_attr;
-	struct mlx4_qp *mqp = to_mqp(qp);
 	int ret;
 
 	memset(&cmd, 0, sizeof(cmd));
-	memset(&device_attr, 0, sizeof(device_attr));
-	device_attr.comp_mask = IBV_EXP_DEVICE_ATTR_RESERVED - 1;
-
-	if (attr_mask & IBV_EXP_QP_PORT) {
-		ret = ibv_query_port(qp->context, attr->port_num,
-				     &port_attr);
+	if (attr_mask & IBV_QP_PORT) {
+		ret = update_port_data(qp, attr->port_num);
 		if (ret)
 			return ret;
-		mqp->link_layer = port_attr.link_layer;
-		if ((port_attr.link_layer == IBV_LINK_LAYER_ETHERNET) &&
-		    (qp->qp_type == IBV_QPT_RAW_ETH)) {
-			ret = ibv_exp_query_device(qp->context, &device_attr);
-			if (ret)
-				return ret;
-			if ((device_attr.comp_mask &
-			    IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS) &&
-			    (device_attr.exp_device_cap_flags &
-			    IBV_EXP_DEVICE_RX_CSUM_IP_PKT))
-				mqp->qp_cap_cache |=
-					MLX4_RX_CSUM_MODE_IP_OK_IP_NON_TCP_UDP;
-		}
 	}
 
 	if (qp->state == IBV_QPS_RESET &&
@@ -646,7 +655,7 @@ int mlx4_exp_query_device(struct ibv_context *context,
 						  IBV_EXP_DEVICE_RX_CSUM_IP_PKT |
 						  IBV_EXP_DEVICE_VXLAN_SUPPORT))) {
 		for (i = 0; i < device_attr->phys_port_cnt; i++) {
-			ret = ibv_query_port(context, i + 1, &port_attr);
+			ret = mlx4_query_port(context, i + 1, &port_attr);
 			if (ret)
 				return ret;
 
@@ -957,6 +966,13 @@ void *mlx4_exp_query_intf(struct ibv_context *context, struct ibv_exp_query_intf
 	if (!params->obj) {
 		errno = EINVAL;
 		*status = IBV_EXP_INTF_STAT_INVAL_OBJ;
+
+		return NULL;
+	}
+
+	if (params->intf_version > MLX4_MAX_FAMILY_VER) {
+		*status = IBV_EXP_INTF_STAT_VERSION_NOT_SUPPORTED;
+
 		return NULL;
 	}
 

@@ -162,7 +162,7 @@ int mlx4_bitmap_alloc(struct mlx4_bitmap *bitmap)
 	return ret;
 }
 
-inline uint32_t find_aligned_range(uint32_t *bitmap,
+static inline uint32_t find_aligned_range(uint32_t *bitmap,
 					uint32_t start, uint32_t nbits,
 					int len, int alignment)
 {
@@ -191,7 +191,7 @@ again:
 	return start;
 }
 
-inline int mlx4_bitmap_alloc_range(struct mlx4_bitmap *bitmap, int cnt,
+static inline int mlx4_bitmap_alloc_range(struct mlx4_bitmap *bitmap, int cnt,
 					int align)
 {
 	uint32_t obj;
@@ -234,7 +234,7 @@ inline int mlx4_bitmap_alloc_range(struct mlx4_bitmap *bitmap, int cnt,
 	return obj;
 }
 
-inline void mlx4_bitmap_free_range(struct mlx4_bitmap *bitmap, uint32_t obj,
+static inline void mlx4_bitmap_free_range(struct mlx4_bitmap *bitmap, uint32_t obj,
 					int cnt)
 {
 	int i;
@@ -250,7 +250,7 @@ inline void mlx4_bitmap_free_range(struct mlx4_bitmap *bitmap, uint32_t obj,
 	mlx4_spin_unlock(&bitmap->lock);
 }
 
-inline int is_bitmap_empty(struct mlx4_bitmap *bitmap)
+static inline int is_bitmap_empty(struct mlx4_bitmap *bitmap)
 {
 	int ret;
 
@@ -261,7 +261,7 @@ inline int is_bitmap_empty(struct mlx4_bitmap *bitmap)
 	return ret;
 }
 
-inline int is_bitmap_avail(struct mlx4_bitmap *bitmap)
+static inline int is_bitmap_avail(struct mlx4_bitmap *bitmap)
 {
 	int ret;
 
@@ -295,7 +295,7 @@ inline void mlx4_bitmap_cleanup(struct mlx4_bitmap *bitmap)
 		free(bitmap->table);
 }
 
-inline void mlx4_bitmap_free(struct mlx4_bitmap *bitmap, uint32_t obj)
+static inline void mlx4_bitmap_free(struct mlx4_bitmap *bitmap, uint32_t obj)
 {
 	mlx4_bitmap_free_range(bitmap, obj, 1);
 }

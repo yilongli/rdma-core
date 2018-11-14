@@ -475,6 +475,7 @@ static int mlx4_init_context(struct verbs_device *v_device,
 	struct mlx4_alloc_ucontext_resp_v3 resp_v3;
 	int				i;
 	struct ibv_exp_device_attr	dev_attrs;
+	struct ibv_device_attr	           dev_legacy_attrs;
 	struct mlx4_device		*dev = to_mdev(&v_device->device);
 	unsigned int			qp_tab_size;
 	unsigned int			bf_reg_size;
@@ -492,6 +493,7 @@ static int mlx4_init_context(struct verbs_device *v_device,
 	memset(&req, 0, sizeof(req));
 	context = to_mctx(ibv_ctx);
 	ibv_ctx->cmd_fd = cmd_fd;
+	ibv_ctx->device = &v_device->device;
 
 	if (pthread_mutex_init(&context->env_mtx, NULL))
 		return EIO;
@@ -589,14 +591,20 @@ static int mlx4_init_context(struct verbs_device *v_device,
 	memset(&dev_attrs, 0, sizeof(dev_attrs));
 	dev_attrs.comp_mask = IBV_EXP_DEVICE_ATTR_WITH_TIMESTAMP_MASK |
 			      IBV_EXP_DEVICE_ATTR_WITH_HCA_CORE_CLOCK |
+			      IBV_EXP_DEVICE_ATTR_EXP_CAP_FLAGS |
 			      IBV_EXP_DEVICE_ATTR_MAX_CTX_RES_DOMAIN;
 
-	if (mlx4_exp_query_device(ibv_ctx, &dev_attrs))
-		goto query_free;
+	if (mlx4_exp_query_device(ibv_ctx, &dev_attrs)) {
+		if (mlx4_query_device(ibv_ctx, &dev_legacy_attrs))
+			goto query_free;
+
+		memcpy(&dev_attrs, &dev_legacy_attrs, sizeof(dev_legacy_attrs));
+	}
 
 	context->max_qp_wr = dev_attrs.max_qp_wr;
 	context->max_sge = dev_attrs.max_sge;
 	context->max_cqe = dev_attrs.max_cqe;
+	context->exp_device_cap_flags = dev_attrs.exp_device_cap_flags;
 	if (dev_attrs.comp_mask & IBV_EXP_DEVICE_ATTR_MAX_CTX_RES_DOMAIN)
 		context->max_ctx_res_domain = dev_attrs.max_ctx_res_domain;
 

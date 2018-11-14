@@ -1,4 +1,10 @@
-libmlx4 (1.0.6mlnx1-OFED.3.1.1.0.0) unstable; urgency=low
+libmlx4 (1.2.1mlnx1-OFED.3.4.0.0.4.34100) unstable; urgency=low
+
+  * Roll 1.2.1mlnx1-1
+
+ -- Alaa Hleihel <alaa@mellanox.com>  Tue, 09 Aug 2016 10:53:10 +0200
+
+libmlx4 (1.0.6mlnx1-1) unstable; urgency=low
 
   * libmlx4: Fix MR address change in rereg_mr
   * libmlx4: revert the endianess fix for immediate data

@@ -459,9 +459,8 @@ static int mlx4_poll_one(struct mlx4_cq *cq,
 				wc->sl = ntohs(cqe->sl_vid) >> 12;
 			exp_wc_flags |= IBV_EXP_WC_WITH_SL;
 		}
-		if (is_exp) {
-			if ((*cur_qp) && ((*cur_qp)->qp_cap_cache &
-			    MLX4_RX_CSUM_MODE_IP_OK_IP_NON_TCP_UDP)) {
+		if (is_exp && *cur_qp) {
+			if ((*cur_qp)->qp_cap_cache & MLX4_RX_CSUM_MODE_IP_OK_IP_NON_TCP_UDP)
 			/* Only ConnectX-3 Pro reports checksum for now) */
 				exp_wc_flags |=
 				MLX4_TRANSPOSE(cqe->badfcs_enc,
@@ -475,10 +474,12 @@ static int mlx4_poll_one(struct mlx4_cq *cq,
 					(uint64_t)IBV_EXP_WC_RX_IPV4_PACKET) |
 				mlx4_transpose_uint16_t(cqe->status,
 					htons(MLX4_CQE_STATUS_IPV6),
-					(uint64_t)IBV_EXP_WC_RX_IPV6_PACKET) |
+					(uint64_t)IBV_EXP_WC_RX_IPV6_PACKET);
+			if ((*cur_qp)->qp_cap_cache & MLX4_RX_VXLAN) {
+				exp_wc_flags |=
 				mlx4_transpose_uint32_t(cqe->vlan_my_qpn,
-					htonl(MLX4_CQE_L2_TUNNEL),
-					(uint64_t)IBV_EXP_WC_RX_TUNNEL_PACKET) |
+				htonl(MLX4_CQE_L2_TUNNEL),
+				(uint64_t)IBV_EXP_WC_RX_TUNNEL_PACKET) |
 				mlx4_transpose_uint32_t(cqe->vlan_my_qpn,
 					htonl(MLX4_CQE_L2_TUNNEL_IPOK),
 					(uint64_t)IBV_EXP_WC_RX_OUTER_IP_CSUM_OK) |
@@ -935,25 +936,28 @@ static inline int32_t poll_cnt(struct ibv_cq *ibcq, uint32_t max_entries, const 
 static inline int32_t get_flags(struct mlx4_qp *cur_qp, struct mlx4_cqe *cqe) __attribute__((always_inline));
 static inline int32_t get_flags(struct mlx4_qp *cur_qp, struct mlx4_cqe *cqe)
 {
-	/* Only ConnectX-3 Pro reports checksum for now) */
-	if (likely(cur_qp && (cur_qp->qp_cap_cache &
-	    MLX4_RX_CSUM_MODE_IP_OK_IP_NON_TCP_UDP))) {
-		int32_t flags;
-		int32_t tmp;
+	int32_t flags;
+	int32_t tmp = 0;
 
+	/* Only ConnectX-3 Pro reports checksum for now */
+	if (likely(cur_qp)) {
 		/*
 		 * The relevant bits are in different locations on their
 		 * CQE fields therefore we can join them in one 32bit
 		 * variable.
 		 */
-		tmp = (cqe->badfcs_enc & MLX4_CQE_STATUS_L4_CSUM) |
-		      (ntohs(cqe->status) & (MLX4_CQE_STATUS_IPOK |
-				             MLX4_CQE_STATUS_IPV4 |
-				             MLX4_CQE_STATUS_IPV6)) |
-		      (ntohl(cqe->vlan_my_qpn) & (MLX4_CQE_L2_TUNNEL |
-				      	          MLX4_CQE_L2_TUNNEL_IPOK |
-				      	          MLX4_CQE_L2_TUNNEL_L4_CSUM |
-				      	          MLX4_CQE_L2_TUNNEL_IPV4));
+		if (cur_qp->qp_cap_cache & MLX4_RX_CSUM_MODE_IP_OK_IP_NON_TCP_UDP)
+			tmp = (cqe->badfcs_enc & MLX4_CQE_STATUS_L4_CSUM) |
+			      (ntohs(cqe->status) & (MLX4_CQE_STATUS_IPOK |
+						MLX4_CQE_STATUS_IPV4 |
+						MLX4_CQE_STATUS_IPV6));
+
+		if (cur_qp->qp_cap_cache & MLX4_RX_VXLAN)
+			tmp |= ntohl(cqe->vlan_my_qpn) & (MLX4_CQE_L2_TUNNEL |
+							MLX4_CQE_L2_TUNNEL_IPOK |
+							MLX4_CQE_L2_TUNNEL_L4_CSUM |
+							MLX4_CQE_L2_TUNNEL_IPV4);
+
 		if (likely(tmp == cur_qp->cached_rx_csum_flags)) {
 			flags = cur_qp->transposed_rx_csum_flags;
 		} else {

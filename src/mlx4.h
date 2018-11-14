@@ -95,6 +95,8 @@
 #define wc_wmb() asm volatile("sfence" ::: "memory")
 #elif defined(__ia64__)
 #define wc_wmb() asm volatile("fwb" ::: "memory")
+#elif defined(__s390x__)
+#define wc_wmb { asm volatile("" : : : "memory") }
 #else
 #define wc_wmb() wmb()
 #endif
@@ -178,6 +180,10 @@ static inline uint32_t mlx4_transpose(uint32_t val, uint32_t from, uint32_t to)
 {
 	return MLX4_TRANSPOSE(val, from, to);
 }
+
+enum {
+	MLX4_MAX_FAMILY_VER = 0
+};
 
 enum {
 	MLX4_MAX_BFS_IN_PAGE	= 8,
@@ -272,8 +278,8 @@ enum {
 };
 
 enum qp_cap_cache {
-	/* The flag below includes VXLAN support as well in mlx4 HW*/
-	MLX4_RX_CSUM_MODE_IP_OK_IP_NON_TCP_UDP		= 1 << 1
+	MLX4_RX_CSUM_MODE_IP_OK_IP_NON_TCP_UDP		= 1 << 1,
+	MLX4_RX_VXLAN					= 1 << 2
 };
 
 enum mlx4_db_type {
@@ -416,6 +422,7 @@ struct mlx4_context {
 	int				max_qp_wr;
 	int				max_sge;
 	int				max_cqe;
+	uint64_t			exp_device_cap_flags;
 	struct {
 		int				offset;
 		int				mult;
@@ -682,6 +689,7 @@ static inline struct mlx4_res_domain *to_mres_domain(struct ibv_exp_res_domain *
 	return to_mxxx(res_domain, res_domain);
 }
 
+int update_port_data(struct ibv_qp *qp, uint8_t port_num);
 int mlx4_alloc_buf(struct mlx4_buf *buf, size_t size, int page_size);
 void mlx4_free_buf(struct mlx4_buf *buf);
 int mlx4_alloc_buf_huge(struct mlx4_context *mctx, struct mlx4_buf *buf,

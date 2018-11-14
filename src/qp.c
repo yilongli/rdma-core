@@ -444,45 +444,6 @@ static inline void set_ptr_data(struct mlx4_wqe_data_seg *dseg,
 		dseg->byte_count = htonl(0x80000000);
 }
 
-/*
- * Avoid using memcpy() to copy to BlueFlame page, since memcpy()
- * implementations may use move-string-buffer assembler instructions,
- * which do not guarantee order of copying.
- */
-#if defined(__x86_64__)
-#define COPY_64B_WC(dst, src)		\
-	__asm__ __volatile__ (		\
-	" movdqa   (%1),%%xmm0\n"	\
-	" movdqa 16(%1),%%xmm1\n"	\
-	" movdqa 32(%1),%%xmm2\n"	\
-	" movdqa 48(%1),%%xmm3\n"	\
-	" movntdq %%xmm0,   (%0)\n"	\
-	" movntdq %%xmm1, 16(%0)\n"	\
-	" movntdq %%xmm2, 32(%0)\n"	\
-	" movntdq %%xmm3, 48(%0)\n"	\
-	: : "r" (dst), "r" (src) : "memory");	\
-	dst += 8;			\
-	src += 8
-#else
-#define COPY_64B_WC(dst, src)	\
-	*dst++ = *src++;	\
-	*dst++ = *src++;	\
-	*dst++ = *src++;	\
-	*dst++ = *src++;	\
-	*dst++ = *src++;	\
-	*dst++ = *src++;	\
-	*dst++ = *src++;	\
-	*dst++ = *src++
-#endif
-
-static void mlx4_bf_copy(uint64_t *dst, uint64_t *src, unsigned bytecnt)
-{
-	while (bytecnt > 0) {
-		COPY_64B_WC(dst, src);
-		bytecnt -= 8 * sizeof(uint64_t);
-	}
-}
-
 /* Convert WQE format to fit BF usage */
 static inline void convert_to_bf_wqe(struct mlx4_qp *qp,
 				     struct mlx4_wqe_ctrl_seg *ctrl,
@@ -580,7 +541,7 @@ static inline void __ring_db(struct mlx4_qp *qp, struct mlx4_wqe_ctrl_seg *ctrl,
 		 * ringing non-cached doorbell record.
 		 */
 		nc_wmb();
-		*qp->sdb = qp->doorbell_qpn;
+		mmio_writel((unsigned long)(qp->sdb), qp->doorbell_qpn);
 	}
 }
 
@@ -2125,7 +2086,7 @@ static inline int send_msg_list(struct ibv_qp *ibqp, struct ibv_sge *sg_list, ui
 		/* use send_flush_unsafe since lock is already taken if needed */
 		send_flush_unsafe(ibqp, _1thrd_evict, wqe_64);
 	else
-		*qp->sdb = qp->doorbell_qpn;
+		mmio_writel((unsigned long)(qp->sdb), qp->doorbell_qpn);
 
 	if (unlikely(thread_safe))
 		mlx4_unlock(&qp->sq.lock);
@@ -2219,7 +2180,7 @@ static int mlx4_send_flush_db(struct ibv_qp *ibqp)
 {
 	struct mlx4_qp *qp = to_mqp(ibqp);
 
-	*qp->sdb = qp->doorbell_qpn;
+	mmio_writel((unsigned long)(qp->sdb), qp->doorbell_qpn);
 
 	return 0;
 }
@@ -2244,9 +2205,9 @@ static inline int send_flush_unsafe(struct ibv_qp *ibqp, const int _1thrd_evict,
 				       qp->last_db_head,
 				       1, _1thrd_evict);
 		else
-			*qp->sdb = qp->doorbell_qpn;
+			mmio_writel((unsigned long)(qp->sdb), qp->doorbell_qpn);
 	} else {
-		*qp->sdb = qp->doorbell_qpn;
+		mmio_writel((unsigned long)(qp->sdb), qp->doorbell_qpn);
 	}
 	qp->last_db_head = qp->sq.head;
 

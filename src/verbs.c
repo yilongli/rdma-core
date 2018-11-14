@@ -1204,16 +1204,12 @@ int mlx4_modify_qp(struct ibv_qp *qp, struct ibv_qp_attr *attr,
 		    int attr_mask)
 {
 	struct ibv_modify_qp cmd;
-	struct ibv_port_attr port_attr;
-	struct mlx4_qp *mqp = to_mqp(qp);
 	int ret;
 
 	if (attr_mask & IBV_QP_PORT) {
-		ret = ibv_query_port(qp->context, attr->port_num,
-				     &port_attr);
+		ret = update_port_data(qp, attr->port_num);
 		if (ret)
 			return ret;
-		mqp->link_layer = port_attr.link_layer;
 	}
 
 	if (qp->state == IBV_QPS_RESET &&
@@ -1317,10 +1313,12 @@ int mlx4_destroy_qp(struct ibv_qp *ibqp)
 		struct mlx4_bfs_data *bfs = &to_mctx(ibqp->context)->bfs;
 		int idx = &(qp->bf->dedic) - bfs->dedic_bf;
 
-		mlx4_spin_lock(&bfs->dedic_bf_lock);
-		bfs->dedic_bf_used[idx] = 0;
-		bfs->dedic_bf_free++;
-		mlx4_spin_unlock(&bfs->dedic_bf_lock);
+		if (0 <= idx && idx < (MLX4_MAX_BFS_IN_PAGE - 1)) {
+			mlx4_spin_lock(&bfs->dedic_bf_lock);
+			bfs->dedic_bf_used[idx] = 0;
+			bfs->dedic_bf_free++;
+			mlx4_spin_unlock(&bfs->dedic_bf_lock);
+		}
 	}
 
 	if (qp->rq.wqe_cnt)
@@ -1386,14 +1384,22 @@ struct ibv_ah *mlx4_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr)
 {
 	struct ibv_ah *ah;
 	struct ibv_exp_port_attr port_attr;
+	struct ibv_port_attr port_attr_legacy;
+	uint8_t			link_layer;
 
 	port_attr.comp_mask = IBV_EXP_QUERY_PORT_ATTR_MASK1;
 	port_attr.mask1 = IBV_EXP_QUERY_PORT_LINK_LAYER;
 
-	if (ibv_exp_query_port(pd->context, attr->port_num, &port_attr))
-		return NULL;
+	if (ibv_exp_query_port(pd->context, attr->port_num, &port_attr)) {
+		if (ibv_query_port(pd->context, attr->port_num, &port_attr_legacy))
+			return NULL;
 
-	ah = mlx4_create_ah_common(pd, attr, port_attr.link_layer);
+		link_layer = port_attr_legacy.link_layer;
+	} else {
+		link_layer = port_attr.link_layer;
+	}
+
+	ah = mlx4_create_ah_common(pd, attr, link_layer);
 
 	return ah;
 }

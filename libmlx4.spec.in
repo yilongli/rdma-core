@@ -1,14 +1,14 @@
 %{!?_with_valgrind: %define _with_valgrind 0}
 %{!?_disable_valgrind: %define _disable_valgrind 0}
 
-%if 0%{?rhel} == 6
+%if 0%{?rhel} != 0
 %if 0%{_disable_valgrind} == 0
 %define _with_valgrind 1
 %endif
 %endif
 
 Name: libmlx4
-Version: 1.0.6mlnx1
+Version: 1.2.1mlnx1
 Release: 1%{?dist}
 Summary: Mellanox ConnectX InfiniBand HCA Userspace Driver
 
