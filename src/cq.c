@@ -246,10 +246,13 @@ static int mlx4_poll_one(struct mlx4_cq *cq,
 			      IBV_EXP_CQ_TIMESTAMP);
 	uint64_t exp_wc_flags = 0;
 	uint64_t wc_flags = 0;
+	uint64_t start_tsc = __rdtsc();
 	cqe = next_cqe_sw(cq);
 	if (!cqe)
 		return CQ_EMPTY;
 
+	timetrace_record_ts(start_tsc, "mlx4_poll_one: about to call next_cqe_sw");
+	timetrace_record_ts(__rdtscp(&i), "mlx4_poll_one: new CQE found");
 	if (cq->cqe_size == 64)
 		++cqe;
 
@@ -539,11 +542,13 @@ int mlx4_poll_cq(struct ibv_cq *ibcq, int ne, struct ibv_exp_wc *wc,
 
 	if (unlikely(cq->stall_next_poll)) {
 		cq->stall_next_poll = 0;
+		timetrace_record("mlx4_poll_cq: about to call mlx4_stall_poll_cq");
 		mlx4_stall_poll_cq();
 	}
 	mlx4_lock(&cq->lock);
 	
 	for (npolled = 0; npolled < ne; ++npolled) {
+		timetrace_record_if_not_dup("mlx4_poll_cq: about to call mlx4_poll_one");
 		err = mlx4_poll_one(cq, &qp, ((void *)wc) + npolled * wc_size,
 				    wc_size, is_exp);
 		if (unlikely(err != CQ_OK))

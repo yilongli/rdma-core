@@ -1,3 +1,31 @@
+This repository is imported from the source libmlx4-1.0.6mlnx1 bundled
+in MLNX_OFED 3.1-1.0.3, which is the (almost) the last MLNX_OFED version
+that supports the ConnectX-2 IB cards used in our RAMCloud cluster at
+Stanford. We then modified the source code to insert PerfUtils timetrace
+statements for profiling performance.
+
+To build the shared mlx4 library, type
+    ./autogen.sh && ./configure --prefix=`pwd` && make -j install
+It will build `libmlx4-rdmav2.so` in directory `lib`.
+
+The system's `libmlx4` is installed under `/usr/lib/libibverbs/`.
+Remember to make a copy before replacing it.
+
+Note: libmlx4 is not linked against `libPerfUtils.a` so `timetrace_*`
+symbols are undefined in the resulting shared library. For example
+    nm -u lib/libmlx4-rdmav2.so | grep timetrace
+            U timetrace_record
+I didn't link against `libPerfUtils.a` because that would require
+me to use `g++` instead of `gcc` to perform the final linking step
+since PerfUtils is written in C++. A quick hack to achieve this is to
+modify the `$CCLD` variable in the auto-generated Makefile to `g++`.
+As a result, the application using this instrumented libmlx4 must use
+option `-rdynamic` to perform the linking step because when `libmlx4`
+is loaded via `dlopen` it has to refer back to the application (which
+has `libPerfUtils.a` linked in) to find those undefined `timetrace_*`
+symbols.
+
+
 Introduction
 ============
 

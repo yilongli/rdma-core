@@ -45,6 +45,9 @@
 #include <infiniband/verbs.h>
 #include <infiniband/verbs_exp.h>
 
+#include <x86intrin.h>
+#include "PerfUtils/timetrace_wrapper.h"
+
 #define MLX4_MMAP_CMD_BITS 8
 #define MLX4_MMAP_GET_CONTIGUOUS_PAGES_CMD 2
 #define MLX4_IB_MMAP_GET_HW_CLOCK 3
@@ -958,5 +961,4 @@ static inline void mlx4_update_cons_index(struct mlx4_cq *cq)
 {
 	*cq->set_ci_db = htonl(cq->cons_index & 0xffffff);
 }
-
 #endif /* MLX4_H */
